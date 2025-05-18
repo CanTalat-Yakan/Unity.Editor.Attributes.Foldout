@@ -36,7 +36,7 @@ namespace UnityEssentials
 
             do
             {
-                bool isFoldoutStart = TryGetFoldoutAttribute(iterator, out var foldoutAttr);
+                bool isFoldoutStart = TryGetFoldoutAttribute(iterator, out var foldoutAttribute);
                 bool isFoldoutEnd = TryGetEndFoldoutAttribute(iterator);
 
                 if (isFoldoutEnd)
@@ -51,7 +51,7 @@ namespace UnityEssentials
 
                 if (isFoldoutStart)
                 {
-                    string[] pathParts = foldoutAttr.Name.Split(new[] { '/' }, System.StringSplitOptions.RemoveEmptyEntries);
+                    string[] pathParts = foldoutAttribute.Name.Split(new[] { '/' }, System.StringSplitOptions.RemoveEmptyEntries);
                     string accumulatedPath = "";
 
                     // Find common ancestry with current stack
@@ -94,7 +94,9 @@ namespace UnityEssentials
                             IndentLevel = EditorGUI.indentLevel
                         };
 
-                        if (shouldShow) EditorGUI.indentLevel++;
+                        if (shouldShow) 
+                            EditorGUI.indentLevel++;
+
                         groupStack.Push(newGroup);
                     }
 
