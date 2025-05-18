@@ -61,6 +61,7 @@ namespace UnityEssentials
 
             PopDivergentGroups(commonDepth);
             CreateNewGroups(pathParts, commonDepth);
+
             _groupStack.Peek().Properties.Add(property.Copy());
         }
 
