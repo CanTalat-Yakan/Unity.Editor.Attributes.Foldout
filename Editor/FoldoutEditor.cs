@@ -21,14 +21,11 @@ namespace UnityEssentials
             public readonly List<SerializedProperty> Properties = new();
             public bool IsExpanded;
         }
-
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
             var iterator = serializedObject.GetIterator();
-
-            // Skip script field
-            iterator.NextVisible(true);
+            iterator.NextVisible(true); // Skip script field
 
             while (iterator.NextVisible(false))
                 ProcessProperty(iterator);
@@ -49,6 +46,17 @@ namespace UnityEssentials
             {
                 ProcessFoldoutStart(property, attribute);
                 return;
+            }
+
+            if (property.hasVisibleChildren && !IsPrimitive(property))
+            {
+                var depth = property.depth;
+                var child = property.Copy();
+                if (child.NextVisible(true))
+                {
+                    do { ProcessProperty(child); }
+                    while (child.NextVisible(false) && child.depth > depth);
+                }
             }
 
             AddToCurrentGroupOrDraw(property);
@@ -151,7 +159,7 @@ namespace UnityEssentials
 
         private void PopAndRenderGroup()
         {
-            if (_groupStack.Count == 0) 
+            if (_groupStack.Count == 0)
                 return;
 
             var group = _groupStack.Pop();
@@ -184,17 +192,27 @@ namespace UnityEssentials
 
         private static FieldInfo GetFieldInfo(SerializedProperty property)
         {
-            System.Type type = property.serializedObject.targetObject.GetType();
+            object obj = property.serializedObject.targetObject;
+            string[] paths = property.propertyPath.Split('.');
             FieldInfo field = null;
+            System.Type type = obj.GetType();
 
-            foreach (var path in property.propertyPath.Split('.'))
+            foreach (var path in paths)
             {
-                field = type.GetField(path, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-                if (field == null) break;
+                // Handle array elements (e.g., "Array.data[0]")
+                if (path.StartsWith("Array.data["))
+                    continue;
+
+                field = type.GetField(path, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field == null) return null;
                 type = field.FieldType;
             }
+
             return field;
         }
+
+        private static bool IsPrimitive(SerializedProperty property) =>
+            property.propertyType != SerializedPropertyType.Generic;
     }
 }
 #endif
