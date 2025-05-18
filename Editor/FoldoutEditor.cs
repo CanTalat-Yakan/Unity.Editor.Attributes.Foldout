@@ -10,193 +10,189 @@ namespace UnityEssentials
     [CustomEditor(typeof(MonoBehaviour), true)]
     public class FoldoutEditor : Editor
     {
-        private static Dictionary<string, bool> _foldoutStates = new();
+        private static readonly Dictionary<string, bool> _foldoutStates = new();
+        private readonly Stack<FoldoutGroup> _groupStack = new();
 
         private class FoldoutGroup
         {
             public string Key;
-            public string FullPath;
-            public List<SerializedProperty> Properties = new();
-            public int IndentLevel;
+            public string Path;
+            public int Indent;
+            public readonly List<SerializedProperty> Properties = new();
+            public bool IsExpanded;
         }
 
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
+            var iterator = serializedObject.GetIterator();
 
-            SerializedProperty iterator = serializedObject.GetIterator();
-            bool enterChildren = true;
+            // Skip script field
+            iterator.NextVisible(true);
 
-            // Skip the script field
-            iterator.NextVisible(enterChildren);
-            enterChildren = false;
+            while (iterator.NextVisible(false))
+                ProcessProperty(iterator);
 
-            Stack<FoldoutGroup> groupStack = new();
-            string targetID = target.GetInstanceID().ToString();
-
-            do
-            {
-                bool isFoldoutStart = TryGetFoldoutAttribute(iterator, out var foldoutAttribute);
-                bool isFoldoutEnd = TryGetEndFoldoutAttribute(iterator);
-
-                if (isFoldoutEnd)
-                {
-                    if (groupStack.Count > 0)
-                    {
-                        FoldoutGroup group = groupStack.Pop();
-                        RenderGroup(group, targetID);
-                    }
-                    continue;
-                }
-
-                if (isFoldoutStart)
-                {
-                    string[] pathParts = foldoutAttribute.Name.Split(new[] { '/' }, System.StringSplitOptions.RemoveEmptyEntries);
-                    string accumulatedPath = "";
-
-                    // Find common ancestry with current stack
-                    int commonDepth = 0;
-                    FoldoutGroup[] currentStack = groupStack.ToArray();
-                    foreach (var part in pathParts)
-                    {
-                        accumulatedPath += (accumulatedPath == "" ? "" : "/") + part;
-                        if (commonDepth < currentStack.Length && currentStack[commonDepth].FullPath == accumulatedPath)
-                            commonDepth++;
-                        else break;
-                    }
-
-                    // Close divergent groups
-                    while (groupStack.Count > commonDepth)
-                    {
-                        FoldoutGroup poppedGroup = groupStack.Pop();
-                        RenderGroup(poppedGroup, targetID);
-                    }
-
-                    // Create new groups for remaining path parts
-                    for (int i = commonDepth; i < pathParts.Length; i++)
-                    {
-                        accumulatedPath = string.Join("/", pathParts.Take(i + 1));
-                        string key = $"{targetID}_{accumulatedPath}";
-
-                        if (!_foldoutStates.ContainsKey(key))
-                            _foldoutStates[key] = false;
-
-                        // Only show foldout if all parent groups are expanded
-                        bool shouldShow = i == 0 || AreAllParentsExpanded(key, targetID);
-
-                        if (shouldShow)
-                            _foldoutStates[key] = EditorGUILayout.Foldout(_foldoutStates[key], pathParts[i]);
-
-                        FoldoutGroup newGroup = new()
-                        {
-                            Key = key,
-                            FullPath = accumulatedPath,
-                            IndentLevel = EditorGUI.indentLevel
-                        };
-
-                        if (shouldShow) 
-                            EditorGUI.indentLevel++;
-
-                        groupStack.Push(newGroup);
-                    }
-
-                    if (groupStack.Count > 0)
-                        groupStack.Peek().Properties.Add(iterator.Copy());
-                }
-                else
-                {
-                    if (groupStack.Count > 0)
-                        groupStack.Peek().Properties.Add(iterator.Copy());
-                    else EditorGUILayout.PropertyField(iterator, true);
-                }
-            }
-            while (iterator.NextVisible(enterChildren));
-
-            // Render remaining groups
-            while (groupStack.Count > 0)
-            {
-                FoldoutGroup group = groupStack.Pop();
-                RenderGroup(group, targetID);
-            }
-
+            RenderRemainingGroups();
             serializedObject.ApplyModifiedProperties();
         }
 
-        private bool TryGetFoldoutAttribute(SerializedProperty property, out FoldoutAttribute attribute)
+        private void ProcessProperty(SerializedProperty property)
         {
-            attribute = null;
-            FieldInfo field = GetFieldInfoFromProperty(property);
-            if (field == null) 
-                return false;
-
-            object[] attributes = field.GetCustomAttributes(typeof(FoldoutAttribute), true);
-            if (attributes.Length == 0) 
-                return false;
-
-            attribute = (FoldoutAttribute)attributes[0];
-            return true;
-        }
-
-        private bool TryGetEndFoldoutAttribute(SerializedProperty property)
-        {
-            FieldInfo field = GetFieldInfoFromProperty(property);
-            if (field == null) 
-                return false;
-
-            object[] attributes = field.GetCustomAttributes(typeof(EndFoldoutAttribute), true);
-            return attributes.Length > 0;
-        }
-
-        private FieldInfo GetFieldInfoFromProperty(SerializedProperty property)
-        {
-            string[] paths = property.propertyPath.Split('.');
-            System.Type type = serializedObject.targetObject.GetType();
-
-            FieldInfo fieldInfo = null;
-            foreach (string path in paths)
+            if (TryGetAttribute<EndFoldoutAttribute>(property, out _))
             {
-                fieldInfo = type.GetField(path, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-                if (fieldInfo == null) 
-                    return null;
-
-                // Handle nested serialized classes
-                if (path == "Array" && paths.Length > 1 && paths[0].Contains("["))
-                    // Handle array elements
-                    type = fieldInfo.FieldType.GetElementType();
-                else type = fieldInfo.FieldType;
+                PopAndRenderGroup();
+                return;
             }
 
-            return fieldInfo;
+            if (TryGetAttribute<FoldoutAttribute>(property, out var attribute))
+            {
+                ProcessFoldoutStart(property, attribute);
+                return;
+            }
+
+            AddToCurrentGroupOrDraw(property);
         }
 
-        private bool AreAllParentsExpanded(string key, string targetID)
+        private void ProcessFoldoutStart(SerializedProperty property, FoldoutAttribute attribute)
         {
-            string[] keyParts = key.Split(new[] { '_' }, 2);
-            string fullPath = keyParts[1];
-            string[] pathSegments = fullPath.Split('/');
+            var pathParts = attribute.Name.Split('/');
+            var commonDepth = GetCommonDepth(pathParts);
 
-            for (int i = 0; i < pathSegments.Length - 1; i++)
+            PopDivergentGroups(commonDepth);
+            CreateNewGroups(pathParts, commonDepth);
+            _groupStack.Peek().Properties.Add(property.Copy());
+        }
+
+        private int GetCommonDepth(string[] pathParts)
+        {
+            int depth = 0;
+            string currentPath = "";
+
+            foreach (var part in pathParts)
             {
-                string parentPath = string.Join("/", pathSegments.Take(i + 1));
-                string parentKey = $"{targetID}_{parentPath}";
+                currentPath += (currentPath == "" ? "" : "/") + part;
+                if (depth < _groupStack.Count && _groupStack.ElementAt(depth).Path == currentPath)
+                    depth++;
+                else break;
+            }
+            return depth;
+        }
 
-                if (!_foldoutStates.TryGetValue(parentKey, out bool parentState) || !parentState)
+        private void PopDivergentGroups(int commonDepth)
+        {
+            while (_groupStack.Count > commonDepth)
+                PopAndRenderGroup();
+        }
+
+        private void CreateNewGroups(string[] pathParts, int startDepth)
+        {
+            string currentPath = "";
+            for (int i = 0; i < startDepth; i++)
+                currentPath += (currentPath == "" ? "" : "/") + pathParts[i];
+
+            for (int i = startDepth; i < pathParts.Length; i++)
+            {
+                currentPath += (currentPath == "" ? "" : "/") + pathParts[i];
+                var group = CreateGroup(currentPath);
+
+                if (ShouldShowGroup(group.Key))
+                {
+                    EditorGUI.indentLevel = group.Indent;
+                    group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, pathParts[i]);
+                    _foldoutStates[group.Key] = group.IsExpanded;
+                }
+
+                _groupStack.Push(group);
+
+                if (group.IsExpanded)
+                    EditorGUI.indentLevel++;
+            }
+        }
+
+        private FoldoutGroup CreateGroup(string path)
+        {
+            var key = $"{target.GetInstanceID()}_{path}";
+            if (!_foldoutStates.TryGetValue(key, out bool isExpanded))
+                _foldoutStates[key] = false;
+
+            return new FoldoutGroup
+            {
+                Key = key,
+                Path = path,
+                Indent = EditorGUI.indentLevel,
+                IsExpanded = isExpanded
+            };
+        }
+
+        private bool ShouldShowGroup(string key)
+        {
+            string[] parts = key.Split('_')[1].Split('/');
+            string currentPath = "";
+
+            for (int i = 0; i < parts.Length - 1; i++)
+            {
+                currentPath += (currentPath == "" ? "" : "/") + parts[i];
+                string parentKey = $"{target.GetInstanceID()}_{currentPath}";
+
+                if (!_foldoutStates.TryGetValue(parentKey, out bool isExpanded) || !isExpanded)
                     return false;
             }
             return true;
         }
 
-        private void RenderGroup(FoldoutGroup group, string targetID)
+        private void AddToCurrentGroupOrDraw(SerializedProperty property)
         {
-            if (AreAllParentsExpanded(group.Key, targetID)
-                && _foldoutStates.TryGetValue(group.Key, out bool state)
-                && state)
+            if (_groupStack.Count > 0)
+                _groupStack.Peek().Properties.Add(property.Copy());
+            else EditorGUILayout.PropertyField(property, true);
+        }
+
+        private void PopAndRenderGroup()
+        {
+            if (_groupStack.Count == 0) 
+                return;
+
+            var group = _groupStack.Pop();
+
+            if (!ShouldShowGroup(group.Key))
+                return;
+
+            EditorGUI.indentLevel = group.Indent;
+            if (group.IsExpanded)
             {
-                EditorGUI.indentLevel = group.IndentLevel + 1;
+                EditorGUI.indentLevel++;
                 foreach (var property in group.Properties)
                     EditorGUILayout.PropertyField(property, true);
             }
-            EditorGUI.indentLevel = group.IndentLevel;
+            EditorGUI.indentLevel = group.Indent;
+        }
+
+        private void RenderRemainingGroups()
+        {
+            while (_groupStack.Count > 0)
+                PopAndRenderGroup();
+        }
+
+        private static bool TryGetAttribute<T>(SerializedProperty property, out T attributeibute) where T : class
+        {
+            attributeibute = null;
+            var field = GetFieldInfo(property);
+            return (attribute = field?.GetCustomAttributes(typeof(T), true).FirstOrDefault() as T) != null;
+        }
+
+        private static FieldInfo GetFieldInfo(SerializedProperty property)
+        {
+            System.Type type = property.serializedObject.targetObject.GetType();
+            FieldInfo field = null;
+
+            foreach (var path in property.propertyPath.Split('.'))
+            {
+                field = type.GetField(path, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+                if (field == null) break;
+                type = field.FieldType;
+            }
+            return field;
         }
     }
 }
