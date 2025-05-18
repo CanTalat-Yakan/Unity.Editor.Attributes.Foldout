@@ -174,9 +174,9 @@ namespace UnityEssentials
                 PopAndRenderGroup();
         }
 
-        private static bool TryGetAttribute<T>(SerializedProperty property, out T attributeibute) where T : class
+        private static bool TryGetAttribute<T>(SerializedProperty property, out T attribute) where T : class
         {
-            attributeibute = null;
+            attribute = null;
             var field = GetFieldInfo(property);
             return (attribute = field?.GetCustomAttributes(typeof(T), true).FirstOrDefault() as T) != null;
         }
