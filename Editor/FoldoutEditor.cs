@@ -10,13 +10,13 @@ namespace UnityEssentials
     [CustomEditor(typeof(MonoBehaviour), true)]
     public class FoldoutEditor : Editor
     {
-        private static Dictionary<string, bool> _foldoutStates = new();
+        private static Dictionary<string, bool> _foldoutStates = new Dictionary<string, bool>();
 
         private class FoldoutGroup
         {
             public string Key;
             public string FullPath;
-            public List<SerializedProperty> Properties = new();
+            public List<SerializedProperty> Properties = new List<SerializedProperty>();
             public int IndentLevel;
         }
 
@@ -31,13 +31,13 @@ namespace UnityEssentials
             iterator.NextVisible(enterChildren);
             enterChildren = false;
 
-            Stack<FoldoutGroup> groupStack = new();
+            Stack<FoldoutGroup> groupStack = new Stack<FoldoutGroup>();
             string targetID = target.GetInstanceID().ToString();
 
             do
             {
-                bool isFoldoutStart = TryGetAttribute<FoldoutAttribute>(iterator, out var foldoutAttr);
-                bool isFoldoutEnd = TryGetAttribute<EndFoldoutAttribute>(iterator, out _);
+                bool isFoldoutStart = TryGetFoldoutAttribute(iterator, out var foldoutAttr);
+                bool isFoldoutEnd = TryGetEndFoldoutAttribute(iterator);
 
                 if (isFoldoutEnd)
                 {
@@ -86,7 +86,9 @@ namespace UnityEssentials
                         bool shouldShow = i == 0 || AreAllParentsExpanded(key, targetID);
 
                         if (shouldShow)
+                        {
                             _foldoutStates[key] = EditorGUILayout.Foldout(_foldoutStates[key], pathParts[i]);
+                        }
 
                         FoldoutGroup newGroup = new FoldoutGroup
                         {
@@ -95,8 +97,7 @@ namespace UnityEssentials
                             IndentLevel = EditorGUI.indentLevel
                         };
 
-                        if (shouldShow) 
-                            EditorGUI.indentLevel++;
+                        if (shouldShow) EditorGUI.indentLevel++;
                         groupStack.Push(newGroup);
                     }
 
@@ -123,6 +124,54 @@ namespace UnityEssentials
             serializedObject.ApplyModifiedProperties();
         }
 
+        private bool TryGetFoldoutAttribute(SerializedProperty prop, out FoldoutAttribute attribute)
+        {
+            attribute = null;
+            FieldInfo field = GetFieldInfoFromProperty(prop);
+            if (field == null) return false;
+
+            object[] attrs = field.GetCustomAttributes(typeof(FoldoutAttribute), true);
+            if (attrs.Length == 0) return false;
+
+            attribute = (FoldoutAttribute)attrs[0];
+            return true;
+        }
+
+        private bool TryGetEndFoldoutAttribute(SerializedProperty prop)
+        {
+            FieldInfo field = GetFieldInfoFromProperty(prop);
+            if (field == null) return false;
+
+            object[] attrs = field.GetCustomAttributes(typeof(EndFoldoutAttribute), true);
+            return attrs.Length > 0;
+        }
+
+        private FieldInfo GetFieldInfoFromProperty(SerializedProperty prop)
+        {
+            string[] paths = prop.propertyPath.Split('.');
+            System.Type type = serializedObject.targetObject.GetType();
+
+            FieldInfo fieldInfo = null;
+            foreach (string path in paths)
+            {
+                fieldInfo = type.GetField(path, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+                if (fieldInfo == null) return null;
+
+                // Handle nested serialized classes
+                if (path == "Array" && paths.Length > 1 && paths[0].Contains("["))
+                {
+                    // Handle array elements
+                    type = fieldInfo.FieldType.GetElementType();
+                }
+                else
+                {
+                    type = fieldInfo.FieldType;
+                }
+            }
+
+            return fieldInfo;
+        }
+
         private bool AreAllParentsExpanded(string key, string targetID)
         {
             string[] keyParts = key.Split(new[] { '_' }, 2);
@@ -142,33 +191,17 @@ namespace UnityEssentials
 
         private void RenderGroup(FoldoutGroup group, string targetID)
         {
-            if (AreAllParentsExpanded(group.Key, targetID)
-                && _foldoutStates.TryGetValue(group.Key, out bool state)
-                && state)
+            if (AreAllParentsExpanded(group.Key, targetID) &&
+                _foldoutStates.TryGetValue(group.Key, out bool state) &&
+                state)
             {
                 EditorGUI.indentLevel = group.IndentLevel + 1;
-                foreach (var property in group.Properties)
-                    EditorGUILayout.PropertyField(property, true);
+                foreach (var prop in group.Properties)
+                {
+                    EditorGUILayout.PropertyField(prop, true);
+                }
             }
             EditorGUI.indentLevel = group.IndentLevel;
-        }
-
-        private bool TryGetAttribute<T>(SerializedProperty property, out T attribute) where T : PropertyAttribute
-        {
-            attribute = null;
-            FieldInfo field = property.serializedObject.targetObject.GetType().GetField(
-                property.propertyPath,
-                BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-
-            if (field == null) 
-                return false;
-
-            object[] attributes = field.GetCustomAttributes(typeof(T), true);
-            if (attributes.Length == 0) 
-                return false;
-
-            attribute = (T)attributes[0];
-            return true;
         }
     }
 }
