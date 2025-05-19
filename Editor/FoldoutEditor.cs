@@ -50,13 +50,12 @@ namespace UnityEssentials
 
         private static void BuildGroupHierarchy(SerializedObject serializedObject)
         {
-            FoldoutGroup currentGroup = null;
-
             s_foldoutStates.Clear();
 
             SerializedProperty iterator = serializedObject.GetIterator();
             iterator.NextVisible(true); // Skip script field
 
+            FoldoutGroup currentGroup = null;
             while (iterator.NextVisible(false))
             {
                 if (TryGetAttributes<EndFoldoutAttribute>(iterator, out var attributes))
