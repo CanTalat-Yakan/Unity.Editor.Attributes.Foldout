@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
-using UnityEngine;
-using static UnityEngine.GraphicsBuffer;
 
 namespace UnityEssentials
 {
@@ -11,7 +9,6 @@ namespace UnityEssentials
     {
         public string StateKey;
         public string FullPath;
-        public int IndentLevel;
         public bool IsExpanded;
         public List<string> PropertyPaths = new();
         public FoldoutGroup ParentGroup;
@@ -41,11 +38,10 @@ namespace UnityEssentials
 
         private static void OnProcessProperty(SerializedProperty property)
         {
+            EditorGUI.indentLevel = property.depth;
             if (s_foldoutGroupMap.TryGetValue(property.propertyPath, out var group))
                 if (group.ParentGroup == null)
                     DrawGroupHierarchy(group);
-
-            EditorGUI.indentLevel = 0;
         }
 
         private static void BuildGroupHierarchy(SerializedObject serializedObject)
@@ -112,7 +108,6 @@ namespace UnityEssentials
             {
                 StateKey = stateKey,
                 FullPath = fullPath,
-                IndentLevel = (parent?.IndentLevel ?? 0) + 1,
                 ParentGroup = parent,
                 IsExpanded = s_foldoutStates[stateKey],
             };
@@ -122,11 +117,15 @@ namespace UnityEssentials
         {
             var parentExpanded = IsParentChainExpanded(group);
 
+            EditorGUI.indentLevel++;
+
             DrawFoldoutToggle(group, parentExpanded);
             DrawGroupContent(group, parentExpanded);
 
             foreach (var child in group.ChildGroups)
                 DrawGroupHierarchy(child);
+
+            EditorGUI.indentLevel--;
         }
 
         private static void DrawFoldoutToggle(FoldoutGroup group, bool parentExpanded)
@@ -134,10 +133,11 @@ namespace UnityEssentials
             if (!parentExpanded)
                 return;
 
-            EditorGUI.indentLevel = group.IndentLevel - 1;
+            EditorGUI.indentLevel--;
             group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.FullPath.Split('/').Last(), true);
+            EditorGUI.indentLevel++;
+
             s_foldoutStates[group.StateKey] = group.IsExpanded;
-            EditorGUI.indentLevel = group.IndentLevel;
         }
 
         private static void DrawGroupContent(FoldoutGroup group, bool parentExpanded)
