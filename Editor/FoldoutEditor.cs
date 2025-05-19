@@ -32,7 +32,8 @@ namespace UnityEssentials
         public static void OnInitialize()
         {
             var serializedObject = InspectorHook.SerializedObject;
-            if (serializedObject == null) return;
+            if (serializedObject == null) 
+                return;
 
             InitializeGroups(serializedObject);
         }
