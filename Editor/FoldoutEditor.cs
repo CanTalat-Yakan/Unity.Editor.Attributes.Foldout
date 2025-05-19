@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
+using UnityEngine;
 
 namespace UnityEssentials
 {
@@ -51,7 +52,6 @@ namespace UnityEssentials
         {
             FoldoutGroup currentGroup = null;
 
-            s_foldoutGroupMap.Clear();
             s_foldoutStates.Clear();
 
             SerializedProperty iterator = serializedObject.GetIterator();
@@ -81,7 +81,7 @@ namespace UnityEssentials
                 {
                     newGroup = CreateNewGroup(parentGroup, segment);
                     newGroup.PropertyPaths.Add(property.propertyPath);
-
+                    Debug.Log(parentGroup?.FullPath + " " + property.name + " " + attribute.Name);
                     s_foldoutGroupMap[property.propertyPath] = newGroup;
 
                     parentGroup?.ChildGroups.Add(newGroup);
@@ -124,17 +124,19 @@ namespace UnityEssentials
         private static void DrawGroupHierarchy(FoldoutGroup group)
         {
             var parentExpanded = IsParentChainExpanded(group);
-            if (parentExpanded)
-                DrawFoldoutToggle(group);
 
+            DrawFoldoutToggle(group, parentExpanded);
             DrawGroupContent(group, parentExpanded);
 
             foreach (var child in group.ChildGroups)
                 DrawGroupHierarchy(child);
         }
 
-        private static void DrawFoldoutToggle(FoldoutGroup group)
+        private static void DrawFoldoutToggle(FoldoutGroup group, bool parentExpanded)
         {
+            if (!parentExpanded)
+                return;
+
             EditorGUI.indentLevel = group.IndentLevel - 1;
             group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.FullPath.Split('/').Last());
             s_foldoutStates[group.StateKey] = group.IsExpanded;
@@ -156,9 +158,6 @@ namespace UnityEssentials
                     InspectorHook.DrawProperty(contentProperty, true);
                 else InspectorHook.MarkPropertyAsHandled(contentProperty.propertyPath);
             }
-
-            foreach (var child in group.ChildGroups)
-                DrawGroupContent(child, parentExpanded);
         }
 
         private static bool IsParentChainExpanded(FoldoutGroup group)
