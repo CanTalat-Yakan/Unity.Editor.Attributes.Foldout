@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
-using UnityEngine;
 
 namespace UnityEssentials
 {
@@ -93,7 +92,7 @@ namespace UnityEssentials
 
                 foldoutGroup = CreateGroup(parentGroup, segment);
                 foldoutGroup.ContentPaths.Add(property.propertyPath);
-                Debug.Log($"FoldoutGroup: {foldoutGroup.Path} - {property.propertyPath} | .{parentGroup?.Path} ,{attribute.Name} -{segments.Count()}");
+
                 _headerMap[property.propertyPath] = foldoutGroup;
 
                 parentGroup?.Children.Add(foldoutGroup);
@@ -185,10 +184,13 @@ namespace UnityEssentials
 
             foreach (var path in paths)
             {
-                if (path.StartsWith("Array.data[")) continue;
+                if (path.StartsWith("Array.data[")) 
+                    continue;
 
                 field = type.GetField(path, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field == null) return null;
+                if (field == null) 
+                    return null;
+
                 type = field.FieldType;
             }
 
