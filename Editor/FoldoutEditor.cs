@@ -80,7 +80,7 @@ namespace UnityEssentials
                 {
                     newGroup = CreateNewGroup(parentGroup, segment);
                     newGroup.PropertyPaths.Add(property.propertyPath);
-                    Debug.Log(parentGroup?.FullPath + " " + property.name + " " + attribute.Name);
+
                     s_foldoutGroupMap[property.propertyPath] = newGroup;
 
                     parentGroup?.ChildGroups.Add(newGroup);
@@ -137,7 +137,7 @@ namespace UnityEssentials
                 return;
 
             EditorGUI.indentLevel = group.IndentLevel - 1;
-            group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.FullPath.Split('/').Last());
+            group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.FullPath.Split('/').Last(), true);
             s_foldoutStates[group.StateKey] = group.IsExpanded;
             EditorGUI.indentLevel = group.IndentLevel;
         }
@@ -192,11 +192,15 @@ namespace UnityEssentials
             var fieldInfo = (FieldInfo)null;
             var currentType = targetObject.GetType();
 
+
             foreach (var segment in pathSegment)
             {
                 // Skip array data paths
                 if (segment.StartsWith("Array.data["))
+                {
+                    Debug.Log(segment);
                     continue;
+                }
 
                 fieldInfo = currentType.GetField(segment, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 if (fieldInfo == null)
