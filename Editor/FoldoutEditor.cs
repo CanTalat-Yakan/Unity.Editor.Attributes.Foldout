@@ -1,28 +1,31 @@
 #if UNITY_EDITOR
-using UnityEditor;
-using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEditor;
 
 namespace UnityEssentials
 {
-    [CustomEditor(typeof(MonoBehaviour), true)]
-    public class FoldoutEditor : Editor
+    public class FoldoutGroup
     {
-        private static readonly Dictionary<string, bool> _foldoutStates = new();
-        private readonly Stack<FoldoutGroup> _groupStack = new();
+        public string Key;
+        public string Path;
+        public int Indent;
+        public readonly List<SerializedProperty> Properties = new();
+        public bool IsExpanded;
+    }
 
-        private class FoldoutGroup
+    public static class FoldoutEditor
+    {
+        private static readonly Dictionary<string, bool> s_foldoutStates = new();
+        private static readonly Stack<FoldoutGroup> s_groupStack = new();
+
+        [InitializeOnLoadMethod]
+        public static void Initialization() => InspectorHook.Add(OnInspectorGUI);
+        public static void OnInspectorGUI()
         {
-            public string Key;
-            public string Path;
-            public int Indent;
-            public readonly List<SerializedProperty> Properties = new();
-            public bool IsExpanded;
-        }
-        public override void OnInspectorGUI()
-        {
+            var serializedObject = InspectorHook.SerializedObject;
+
             serializedObject.Update();
             var iterator = serializedObject.GetIterator();
             iterator.NextVisible(true); // Skip script field
@@ -34,7 +37,7 @@ namespace UnityEssentials
             serializedObject.ApplyModifiedProperties();
         }
 
-        private void ProcessProperty(SerializedProperty property)
+        private static void ProcessProperty(SerializedProperty property)
         {
             if (TryGetAttribute<EndFoldoutAttribute>(property, out _))
             {
@@ -62,7 +65,7 @@ namespace UnityEssentials
             AddToCurrentGroupOrDraw(property);
         }
 
-        private void ProcessFoldoutStart(SerializedProperty property, FoldoutAttribute attribute)
+        private static void ProcessFoldoutStart(SerializedProperty property, FoldoutAttribute attribute)
         {
             var pathParts = attribute.Name.Split('/');
             var commonDepth = GetCommonDepth(pathParts);
@@ -70,10 +73,10 @@ namespace UnityEssentials
             PopDivergentGroups(commonDepth);
             CreateNewGroups(pathParts, commonDepth);
 
-            _groupStack.Peek().Properties.Add(property.Copy());
+            s_groupStack.Peek().Properties.Add(property.Copy());
         }
 
-        private int GetCommonDepth(string[] pathParts)
+        private static int GetCommonDepth(string[] pathParts)
         {
             int depth = 0;
             string currentPath = "";
@@ -81,20 +84,20 @@ namespace UnityEssentials
             foreach (var part in pathParts)
             {
                 currentPath += (currentPath == "" ? "" : "/") + part;
-                if (depth < _groupStack.Count && _groupStack.ElementAt(depth).Path == currentPath)
+                if (depth < s_groupStack.Count && s_groupStack.ElementAt(depth).Path == currentPath)
                     depth++;
                 else break;
             }
             return depth;
         }
 
-        private void PopDivergentGroups(int commonDepth)
+        private static void PopDivergentGroups(int commonDepth)
         {
-            while (_groupStack.Count > commonDepth)
+            while (s_groupStack.Count > commonDepth)
                 PopAndRenderGroup();
         }
 
-        private void CreateNewGroups(string[] pathParts, int startDepth)
+        private static void CreateNewGroups(string[] pathParts, int startDepth)
         {
             string currentPath = "";
             for (int i = 0; i < startDepth; i++)
@@ -109,21 +112,21 @@ namespace UnityEssentials
                 {
                     EditorGUI.indentLevel = group.Indent;
                     group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, pathParts[i]);
-                    _foldoutStates[group.Key] = group.IsExpanded;
+                    s_foldoutStates[group.Key] = group.IsExpanded;
                 }
 
-                _groupStack.Push(group);
+                s_groupStack.Push(group);
 
                 if (group.IsExpanded)
                     EditorGUI.indentLevel++;
             }
         }
 
-        private FoldoutGroup CreateGroup(string path)
+        private static FoldoutGroup CreateGroup(string path)
         {
-            var key = $"{target.GetInstanceID()}_{path}";
-            if (!_foldoutStates.TryGetValue(key, out bool isExpanded))
-                _foldoutStates[key] = false;
+            var key = $"{InspectorHook.Target.GetInstanceID()}_{path}";
+            if (!s_foldoutStates.TryGetValue(key, out bool isExpanded))
+                s_foldoutStates[key] = false;
 
             return new FoldoutGroup
             {
@@ -134,7 +137,7 @@ namespace UnityEssentials
             };
         }
 
-        private bool ShouldShowGroup(string key)
+        private static bool ShouldShowGroup(string key)
         {
             string[] parts = key.Split('_')[1].Split('/');
             string currentPath = "";
@@ -142,27 +145,27 @@ namespace UnityEssentials
             for (int i = 0; i < parts.Length - 1; i++)
             {
                 currentPath += (currentPath == "" ? "" : "/") + parts[i];
-                string parentKey = $"{target.GetInstanceID()}_{currentPath}";
+                string parentKey = $"{InspectorHook.Target.GetInstanceID()}_{currentPath}";
 
-                if (!_foldoutStates.TryGetValue(parentKey, out bool isExpanded) || !isExpanded)
+                if (!s_foldoutStates.TryGetValue(parentKey, out bool isExpanded) || !isExpanded)
                     return false;
             }
             return true;
         }
 
-        private void AddToCurrentGroupOrDraw(SerializedProperty property)
+        private static void AddToCurrentGroupOrDraw(SerializedProperty property)
         {
-            if (_groupStack.Count > 0)
-                _groupStack.Peek().Properties.Add(property.Copy());
+            if (s_groupStack.Count > 0)
+                s_groupStack.Peek().Properties.Add(property.Copy());
             else EditorGUILayout.PropertyField(property, true);
         }
 
-        private void PopAndRenderGroup()
+        private static void PopAndRenderGroup()
         {
-            if (_groupStack.Count == 0)
+            if (s_groupStack.Count == 0)
                 return;
 
-            var group = _groupStack.Pop();
+            var group = s_groupStack.Pop();
 
             if (!ShouldShowGroup(group.Key))
                 return;
@@ -177,9 +180,9 @@ namespace UnityEssentials
             EditorGUI.indentLevel = group.Indent;
         }
 
-        private void RenderRemainingGroups()
+        private static void RenderRemainingGroups()
         {
-            while (_groupStack.Count > 0)
+            while (s_groupStack.Count > 0)
                 PopAndRenderGroup();
         }
 

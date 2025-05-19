@@ -2,6 +2,7 @@
     "name": "UnityEssentials.FoldoutAttribute.Editor",
     "rootNamespace": "UnityEssentials",
     "references": [
+        "GUID:9fb86f0caf7d8a8488cd8aeb21105895",
         "GUID:72a9fca735ca6474ebd8a1debfd2bb9e"
     ],
     "includePlatforms": [],
