@@ -19,8 +19,8 @@ namespace UnityEssentials
 
     public static class FoldoutEditor
     {
+        private static Dictionary<string, FoldoutGroup> s_foldoutGroupMap = new();
         private static readonly Dictionary<string, bool> s_foldoutStates = new();
-        private static Dictionary<string, FoldoutGroup> s_groupMap = new();
 
         [InitializeOnLoadMethod]
         public static void Initialization()
@@ -40,7 +40,7 @@ namespace UnityEssentials
 
         private static void OnProcessProperty(SerializedProperty property)
         {
-            if (s_groupMap.TryGetValue(property.propertyPath, out var group))
+            if (s_foldoutGroupMap.TryGetValue(property.propertyPath, out var group))
                 if (group.ParentGroup == null)
                     DrawGroupHierarchy(group);
 
@@ -51,7 +51,8 @@ namespace UnityEssentials
         {
             FoldoutGroup currentGroup = null;
 
-            s_groupMap.Clear();
+            s_foldoutGroupMap.Clear();
+            s_foldoutStates.Clear();
 
             SerializedProperty iterator = serializedObject.GetIterator();
             iterator.NextVisible(true); // Skip script field
@@ -81,7 +82,7 @@ namespace UnityEssentials
                     newGroup = CreateNewGroup(parentGroup, segment);
                     newGroup.PropertyPaths.Add(property.propertyPath);
 
-                    s_groupMap[property.propertyPath] = newGroup;
+                    s_foldoutGroupMap[property.propertyPath] = newGroup;
 
                     parentGroup?.ChildGroups.Add(newGroup);
                     parentGroup = newGroup;
@@ -92,7 +93,7 @@ namespace UnityEssentials
 
         private static bool FindExistingParentGroup(string segment, ref FoldoutGroup parentGroup)
         {
-            foreach (var group in s_groupMap.Values)
+            foreach (var group in s_foldoutGroupMap.Values)
                 if (group.FullPath.EndsWith(segment))
                 {
                     parentGroup = group;
