@@ -1,9 +1,9 @@
 #if UNITY_EDITOR
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using static UnityEngine.GraphicsBuffer;
 
 namespace UnityEssentials
 {
@@ -52,21 +52,19 @@ namespace UnityEssentials
         {
             s_foldoutStates.Clear();
 
-            SerializedProperty iterator = serializedObject.GetIterator();
-            iterator.NextVisible(true); // Skip script field
-
             FoldoutGroup currentGroup = null;
-            while (iterator.NextVisible(false))
+
+            InspectorHookUtilities.IterateProperties((property) =>
             {
-                if (TryGetAttributes<EndFoldoutAttribute>(iterator, out var attributes))
+                if (InspectorHookUtilities.TryGetAttributes<EndFoldoutAttribute>(property, out var attributes))
                     foreach (var _ in attributes)
                         currentGroup = currentGroup?.ParentGroup;
 
-                if (TryGetAttribute<FoldoutAttribute>(iterator, out var attribute))
-                    currentGroup = CreateOrGetGroup(iterator, attribute);
+                if (InspectorHookUtilities.TryGetAttribute<FoldoutAttribute>(property, out var attribute))
+                    currentGroup = CreateOrGetGroup(property, attribute);
 
-                currentGroup?.PropertyPaths.Add(iterator.propertyPath);
-            }
+                currentGroup?.PropertyPaths.Add(property.propertyPath);
+            });
         }
 
         private static FoldoutGroup CreateOrGetGroup(SerializedProperty property, FoldoutAttribute attribute)
@@ -169,44 +167,6 @@ namespace UnityEssentials
                 current = current.ParentGroup;
             }
             return true;
-        }
-
-        private static bool TryGetAttributes<T>(SerializedProperty property, out List<T> attributes) where T : class
-        {
-            var field = GetSerializedFieldInfo(property);
-            attributes = field?.GetCustomAttributes(typeof(T), true).Cast<T>().ToList() ?? new List<T>();
-            return attributes.Count > 0;
-        }
-
-        private static bool TryGetAttribute<T>(SerializedProperty property, out T attribute) where T : class
-        {
-            attribute = null;
-            var field = GetSerializedFieldInfo(property);
-            return (attribute = field?.GetCustomAttributes(typeof(T), true).FirstOrDefault() as T) != null;
-        }
-
-        private static FieldInfo GetSerializedFieldInfo(SerializedProperty property)
-        {
-            var targetObject = property.serializedObject.targetObject;
-            var pathSegment = property.propertyPath.Split('.');
-            var fieldInfo = (FieldInfo)null;
-            var currentType = targetObject.GetType();
-
-
-            foreach (var segment in pathSegment)
-            {
-                // Skip array data paths
-                if (segment.StartsWith("Array.data["))
-                    continue;
-
-                fieldInfo = currentType.GetField(segment, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (fieldInfo == null)
-                    return null;
-
-                currentType = fieldInfo.FieldType;
-            }
-
-            return fieldInfo;
         }
     }
 }
