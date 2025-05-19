@@ -20,7 +20,7 @@ namespace UnityEssentials
     public static class FoldoutEditor
     {
         private static readonly Dictionary<string, bool> _foldoutStates = new();
-        private static Dictionary<string, FoldoutGroup> _headerMap = new();
+        private static Dictionary<string, FoldoutGroup> _groupMap = new();
 
         [InitializeOnLoadMethod]
         public static void Initialization()
@@ -32,29 +32,26 @@ namespace UnityEssentials
         public static void OnInitialize()
         {
             var serializedObject = InspectorHook.SerializedObject;
-            if (serializedObject == null) 
+            if (serializedObject == null)
                 return;
 
-            InitializeGroups(serializedObject);
+            BuildGroupHierarchy(serializedObject);
         }
 
         private static void OnProcessProperty(SerializedProperty property)
         {
-            if (_headerMap.TryGetValue(property.propertyPath, out var group))
-            {
-                var segments = group.Key.Split('_')[1].Split('/');
-                if (segments.Length == 1)
+            if (_groupMap.TryGetValue(property.propertyPath, out var group))
+                if (group.Parent == null)
                     RenderFoldoutGroup(group);
-            }
+
             EditorGUI.indentLevel = 0;
         }
 
-        private static void InitializeGroups(SerializedObject serializedObject)
+        private static void BuildGroupHierarchy(SerializedObject serializedObject)
         {
             FoldoutGroup currentGroup = null;
-            var stack = new Stack<FoldoutGroup>();
 
-            _headerMap.Clear();
+            _groupMap.Clear();
 
             SerializedProperty iterator = serializedObject.GetIterator();
             iterator.NextVisible(true); // Skip script field
@@ -66,41 +63,43 @@ namespace UnityEssentials
                         currentGroup = currentGroup?.Parent;
 
                 if (TryGetAttribute<FoldoutAttribute>(iterator, out var attribute))
-                    currentGroup = HandleFoldoutStart(iterator, attribute);
+                    currentGroup = CreateOrGetGroup(iterator, attribute);
 
                 currentGroup?.ContentPaths.Add(iterator.propertyPath);
             }
         }
 
-        private static FoldoutGroup HandleFoldoutStart(SerializedProperty property, FoldoutAttribute attribute)
+        private static FoldoutGroup CreateOrGetGroup(SerializedProperty property, FoldoutAttribute attribute)
         {
-            FoldoutGroup foldoutGroup = null;
+            FoldoutGroup newGroup = null;
             FoldoutGroup parentGroup = null;
 
-            var segments = attribute.Name.Split('/');
-            foreach (var segment in segments)
-            {
-                var segmentExists = false;
-                foreach (var initializedFoldoutGroup in _headerMap.Values)
-                    if (segmentExists = initializedFoldoutGroup.Path.EndsWith(segment))
-                    {
-                        parentGroup = initializedFoldoutGroup;
-                        break;
-                    }
+            var pathSegments = attribute.Name.Split('/');
+            foreach (var segment in pathSegments)
+                if (!FindExistingParentGroup(segment, ref parentGroup))
+                {
+                    newGroup = CreateGroup(parentGroup, segment);
+                    newGroup.ContentPaths.Add(property.propertyPath);
 
-                if (segmentExists)
-                    continue;
+                    _groupMap[property.propertyPath] = newGroup;
 
-                foldoutGroup = CreateGroup(parentGroup, segment);
-                foldoutGroup.ContentPaths.Add(property.propertyPath);
+                    parentGroup?.Children.Add(newGroup);
+                    parentGroup = newGroup;
+                }
 
-                _headerMap[property.propertyPath] = foldoutGroup;
+            return newGroup;
+        }
 
-                parentGroup?.Children.Add(foldoutGroup);
-                parentGroup = foldoutGroup;
-            }
+        private static bool FindExistingParentGroup(string segment, ref FoldoutGroup parentGroup)
+        {
+            foreach (var group in _groupMap.Values)
+                if (group.Path.EndsWith(segment))
+                {
+                    parentGroup = group;
+                    return true;
+                }
 
-            return foldoutGroup;
+            return false;
         }
 
         private static FoldoutGroup CreateGroup(FoldoutGroup parent, string segment)
@@ -185,11 +184,11 @@ namespace UnityEssentials
 
             foreach (var path in paths)
             {
-                if (path.StartsWith("Array.data[")) 
+                if (path.StartsWith("Array.data["))
                     continue;
 
                 field = type.GetField(path, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field == null) 
+                if (field == null)
                     return null;
 
                 type = field.FieldType;
