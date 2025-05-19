@@ -197,10 +197,7 @@ namespace UnityEssentials
             {
                 // Skip array data paths
                 if (segment.StartsWith("Array.data["))
-                {
-                    Debug.Log(segment);
                     continue;
-                }
 
                 fieldInfo = currentType.GetField(segment, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 if (fieldInfo == null)
