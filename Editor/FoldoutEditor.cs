@@ -8,19 +8,19 @@ namespace UnityEssentials
 {
     public class FoldoutGroup
     {
-        public string Key;
-        public string Path;
-        public int Indent;
+        public string StateKey;
+        public string FullPath;
+        public int IndentLevel;
         public bool IsExpanded;
-        public List<string> ContentPaths = new();
-        public FoldoutGroup Parent;
-        public readonly List<FoldoutGroup> Children = new();
+        public List<string> PropertyPaths = new();
+        public FoldoutGroup ParentGroup;
+        public readonly List<FoldoutGroup> ChildGroups = new();
     }
 
     public static class FoldoutEditor
     {
-        private static readonly Dictionary<string, bool> _foldoutStates = new();
-        private static Dictionary<string, FoldoutGroup> _groupMap = new();
+        private static readonly Dictionary<string, bool> s_foldoutStates = new();
+        private static Dictionary<string, FoldoutGroup> s_groupMap = new();
 
         [InitializeOnLoadMethod]
         public static void Initialization()
@@ -40,9 +40,9 @@ namespace UnityEssentials
 
         private static void OnProcessProperty(SerializedProperty property)
         {
-            if (_groupMap.TryGetValue(property.propertyPath, out var group))
-                if (group.Parent == null)
-                    RenderFoldoutGroup(group);
+            if (s_groupMap.TryGetValue(property.propertyPath, out var group))
+                if (group.ParentGroup == null)
+                    DrawGroupHierarchy(group);
 
             EditorGUI.indentLevel = 0;
         }
@@ -51,7 +51,7 @@ namespace UnityEssentials
         {
             FoldoutGroup currentGroup = null;
 
-            _groupMap.Clear();
+            s_groupMap.Clear();
 
             SerializedProperty iterator = serializedObject.GetIterator();
             iterator.NextVisible(true); // Skip script field
@@ -60,12 +60,12 @@ namespace UnityEssentials
             {
                 if (TryGetAttributes<EndFoldoutAttribute>(iterator, out var attributes))
                     foreach (var _ in attributes)
-                        currentGroup = currentGroup?.Parent;
+                        currentGroup = currentGroup?.ParentGroup;
 
                 if (TryGetAttribute<FoldoutAttribute>(iterator, out var attribute))
                     currentGroup = CreateOrGetGroup(iterator, attribute);
 
-                currentGroup?.ContentPaths.Add(iterator.propertyPath);
+                currentGroup?.PropertyPaths.Add(iterator.propertyPath);
             }
         }
 
@@ -78,12 +78,12 @@ namespace UnityEssentials
             foreach (var segment in pathSegments)
                 if (!FindExistingParentGroup(segment, ref parentGroup))
                 {
-                    newGroup = CreateGroup(parentGroup, segment);
-                    newGroup.ContentPaths.Add(property.propertyPath);
+                    newGroup = CreateNewGroup(parentGroup, segment);
+                    newGroup.PropertyPaths.Add(property.propertyPath);
 
-                    _groupMap[property.propertyPath] = newGroup;
+                    s_groupMap[property.propertyPath] = newGroup;
 
-                    parentGroup?.Children.Add(newGroup);
+                    parentGroup?.ChildGroups.Add(newGroup);
                     parentGroup = newGroup;
                 }
 
@@ -92,8 +92,8 @@ namespace UnityEssentials
 
         private static bool FindExistingParentGroup(string segment, ref FoldoutGroup parentGroup)
         {
-            foreach (var group in _groupMap.Values)
-                if (group.Path.EndsWith(segment))
+            foreach (var group in s_groupMap.Values)
+                if (group.FullPath.EndsWith(segment))
                 {
                     parentGroup = group;
                     return true;
@@ -102,36 +102,47 @@ namespace UnityEssentials
             return false;
         }
 
-        private static FoldoutGroup CreateGroup(FoldoutGroup parent, string segment)
+        private static FoldoutGroup CreateNewGroup(FoldoutGroup parent, string segment)
         {
-            var path = parent?.Path == null ? segment : $"{parent.Path}/{segment}";
-            var key = $"{InspectorHook.Target.GetInstanceID()}_{path}";
+            var fullPath = parent?.FullPath == null ? segment : $"{parent.FullPath}/{segment}";
+            var stateKey = $"{InspectorHook.Target.GetInstanceID()}_{fullPath}";
 
-            if (!_foldoutStates.ContainsKey(key))
-                _foldoutStates[key] = false;
+            if (!s_foldoutStates.ContainsKey(stateKey))
+                s_foldoutStates[stateKey] = false;
 
             return new FoldoutGroup
             {
-                Key = key,
-                Path = path,
-                Indent = parent?.Indent + 1 ?? 1,
-                Parent = parent,
-                IsExpanded = _foldoutStates[key],
+                StateKey = stateKey,
+                FullPath = fullPath,
+                IndentLevel = (parent?.IndentLevel ?? 0) + 1,
+                ParentGroup = parent,
+                IsExpanded = s_foldoutStates[stateKey],
             };
         }
 
-        private static void RenderFoldoutGroup(FoldoutGroup group)
+        private static void DrawGroupHierarchy(FoldoutGroup group)
         {
-            var parentExpanded = ShouldShowGroup(group);
+            var parentExpanded = IsParentChainExpanded(group);
             if (parentExpanded)
-            {
-                EditorGUI.indentLevel = group.Indent - 1;
-                group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.Path.Split('/').Last());
-                _foldoutStates[group.Key] = group.IsExpanded;
-                EditorGUI.indentLevel = group.Indent;
-            }
+                DrawFoldoutToggle(group);
 
-            foreach (var path in group.ContentPaths)
+            DrawGroupContent(group, parentExpanded);
+
+            foreach (var child in group.ChildGroups)
+                DrawGroupHierarchy(child);
+        }
+
+        private static void DrawFoldoutToggle(FoldoutGroup group)
+        {
+            EditorGUI.indentLevel = group.IndentLevel - 1;
+            group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.FullPath.Split('/').Last());
+            s_foldoutStates[group.StateKey] = group.IsExpanded;
+            EditorGUI.indentLevel = group.IndentLevel;
+        }
+
+        private static void DrawGroupContent(FoldoutGroup group, bool parentExpanded)
+        {
+            foreach (var path in group.PropertyPaths)
             {
                 var contentProperty = InspectorHook.SerializedObject.FindProperty(path);
                 if (contentProperty == null)
@@ -145,25 +156,25 @@ namespace UnityEssentials
                 else InspectorHook.MarkPropertyAsHandled(contentProperty.propertyPath);
             }
 
-            foreach (var child in group.Children)
-                RenderFoldoutGroup(child);
+            foreach (var child in group.ChildGroups)
+                DrawGroupContent(child, parentExpanded);
         }
 
-        private static bool ShouldShowGroup(FoldoutGroup group)
+        private static bool IsParentChainExpanded(FoldoutGroup group)
         {
-            var current = group.Parent;
+            var current = group.ParentGroup;
             while (current != null)
             {
                 if (!current.IsExpanded)
                     return false;
-                current = current.Parent;
+                current = current.ParentGroup;
             }
             return true;
         }
 
         private static bool TryGetAttributes<T>(SerializedProperty property, out List<T> attributes) where T : class
         {
-            var field = GetFieldInfo(property);
+            var field = GetSerializedFieldInfo(property);
             attributes = field?.GetCustomAttributes(typeof(T), true).Cast<T>().ToList() ?? new List<T>();
             return attributes.Count > 0;
         }
@@ -171,30 +182,31 @@ namespace UnityEssentials
         private static bool TryGetAttribute<T>(SerializedProperty property, out T attribute) where T : class
         {
             attribute = null;
-            var field = GetFieldInfo(property);
+            var field = GetSerializedFieldInfo(property);
             return (attribute = field?.GetCustomAttributes(typeof(T), true).FirstOrDefault() as T) != null;
         }
 
-        private static FieldInfo GetFieldInfo(SerializedProperty property)
+        private static FieldInfo GetSerializedFieldInfo(SerializedProperty property)
         {
-            object obj = property.serializedObject.targetObject;
-            string[] paths = property.propertyPath.Split('.');
-            FieldInfo field = null;
-            System.Type type = obj.GetType();
+            var targetObject = property.serializedObject.targetObject;
+            var pathSegment = property.propertyPath.Split('.');
+            var fieldInfo = (FieldInfo)null;
+            var currentType = targetObject.GetType();
 
-            foreach (var path in paths)
+            foreach (var segment in pathSegment)
             {
-                if (path.StartsWith("Array.data["))
+                // Skip array data paths
+                if (segment.StartsWith("Array.data["))
                     continue;
 
-                field = type.GetField(path, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (field == null)
+                fieldInfo = currentType.GetField(segment, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (fieldInfo == null)
                     return null;
 
-                type = field.FieldType;
+                currentType = fieldInfo.FieldType;
             }
 
-            return field;
+            return fieldInfo;
         }
     }
 }
