@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace UnityEssentials
@@ -10,5 +11,6 @@ namespace UnityEssentials
             Name = name;
     }
 
+    [AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
     public class EndFoldoutAttribute : PropertyAttribute { }
 }
