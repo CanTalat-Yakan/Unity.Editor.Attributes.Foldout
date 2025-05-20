@@ -118,13 +118,13 @@ namespace UnityEssentials
             var parentExpanded = IsParentChainExpanded(group);
 
             EditorGUI.indentLevel++;
+            {
+                DrawFoldoutToggle(group, parentExpanded);
+                DrawGroupContent(group, parentExpanded);
 
-            DrawFoldoutToggle(group, parentExpanded);
-            DrawGroupContent(group, parentExpanded);
-
-            foreach (var child in group.ChildGroups)
-                DrawGroupHierarchy(child);
-
+                foreach (var child in group.ChildGroups)
+                    DrawGroupHierarchy(child);
+            }
             EditorGUI.indentLevel--;
         }
 
@@ -134,7 +134,9 @@ namespace UnityEssentials
                 return;
 
             EditorGUI.indentLevel--;
-            group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.FullPath.Split('/').Last(), true);
+            {
+                group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.FullPath.Split('/').Last(), true);
+            }
             EditorGUI.indentLevel++;
 
             s_foldoutStates[group.StateKey] = group.IsExpanded;
