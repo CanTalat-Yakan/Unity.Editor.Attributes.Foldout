@@ -24,7 +24,7 @@ namespace UnityEssentials
         public static void Initialization()
         {
             InspectorHook.AddInitialization(OnInitialize);
-            InspectorHook.AddProcessProperty(OnProcessProperty);
+            InspectorHook.AddProcessProperty(OnProcessProperty, -1001);
         }
 
         public static void OnInitialize()
