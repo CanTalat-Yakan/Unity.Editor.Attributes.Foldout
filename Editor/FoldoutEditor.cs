@@ -33,13 +33,6 @@ namespace UnityEssentials
         private static Dictionary<string, FoldoutGroup> s_foldoutGroupMap = new();
         private static readonly Dictionary<string, bool> s_foldoutStates = new();
 
-        /// <summary>
-        /// Initializes the inspector hooks by registering initialization and property processing callbacks.
-        /// </summary>
-        /// <remarks>This method is automatically invoked when the editor loads, as it is marked with the
-        /// <see cref="InitializeOnLoadMethodAttribute"/>. It registers the <c>OnInitialize</c> callback for
-        /// initialization and the <c>OnProcessProperty</c> callback for property processing with a priority of
-        /// 1000.</remarks>
         [InitializeOnLoadMethod]
         public static void Initialization()
         {
