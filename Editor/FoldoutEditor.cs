@@ -236,9 +236,7 @@ namespace UnityEssentials
                 return;
 
             EditorGUI.indentLevel--;
-            {
-                group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.FullPath.Split('/').Last(), true);
-            }
+            group.IsExpanded = EditorGUILayout.Foldout(group.IsExpanded, group.FullPath.Split('/').Last(), true);
             EditorGUI.indentLevel++;
 
             s_foldoutStates[group.StateKey] = group.IsExpanded;
@@ -271,13 +269,6 @@ namespace UnityEssentials
             }
         }
 
-        /// <summary>
-        /// Determines whether all parent groups in the hierarchy of the specified <see cref="FoldoutGroup"/> are
-        /// expanded.
-        /// </summary>
-        /// <param name="group">The <see cref="FoldoutGroup"/> whose parent chain is to be checked.</param>
-        /// <returns><see langword="true"/> if all parent groups in the hierarchy are expanded; otherwise, <see
-        /// langword="false"/>.</returns>
         private static bool IsParentChainExpanded(FoldoutGroup group)
         {
             var current = group.ParentGroup;
