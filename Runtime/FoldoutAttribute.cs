@@ -11,9 +11,13 @@ namespace UnityEssentials
     public class FoldoutAttribute : PropertyAttribute
     {
         public string Name { get; private set; }
+        public bool Background { get; private set; }
 
-        public FoldoutAttribute(string name) =>
+        public FoldoutAttribute(string name, bool background = false)
+        {
             Name = name;
+            Background = background;
+        }
     }
 
     /// <summary>

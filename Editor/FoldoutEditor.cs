@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
+using UnityEngine;
 
 namespace UnityEssentials
 {
@@ -19,6 +20,7 @@ namespace UnityEssentials
         public List<string> PropertyPaths = new();
         public FoldoutGroup ParentGroup;
         public readonly List<FoldoutGroup> ChildGroups = new();
+        public bool Background;
     }
 
     /// <summary>
@@ -126,6 +128,9 @@ namespace UnityEssentials
                     parentGroup = newGroup;
                 }
 
+            if (newGroup != null)
+                newGroup.Background = attribute.Background;
+
             return newGroup;
         }
 
@@ -188,9 +193,28 @@ namespace UnityEssentials
 
             EditorGUI.indentLevel++;
             {
-                DrawFoldoutToggle(group, parentExpanded);
-                DrawGroupContent(group, parentExpanded);
+                if (!group.Background)
+                    DrawFoldoutToggle(group, parentExpanded);
+                else
+                {
+                    GUILayout.BeginHorizontal();
+                    {
+                        GUILayout.Space(-16f);
+                        float boxWidth = EditorGUIUtility.currentViewWidth - 6f;
+                        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox, GUILayout.Width(boxWidth)))
+                        {
+                            GUILayout.BeginHorizontal();
+                            {
+                                GUILayout.Space(12f);
+                                DrawFoldoutToggle(group, parentExpanded);
+                            }
+                            GUILayout.EndHorizontal();
+                        }
+                    }
+                    GUILayout.EndHorizontal();
+                }
 
+                DrawGroupContent(group, parentExpanded);
                 foreach (var child in group.ChildGroups)
                     DrawGroupHierarchy(child);
             }
