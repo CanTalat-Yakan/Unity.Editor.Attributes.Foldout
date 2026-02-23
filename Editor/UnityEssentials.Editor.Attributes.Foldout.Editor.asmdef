@@ -1,7 +1,10 @@
 {
-    "name": "UnityEssentials.FoldoutAttribute",
+    "name": "UnityEssentials.Editor.Attributes.Foldout.Editor",
     "rootNamespace": "UnityEssentials",
-    "references": [],
+    "references": [
+        "GUID:9fb86f0caf7d8a8488cd8aeb21105895",
+        "GUID:72a9fca735ca6474ebd8a1debfd2bb9e"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
