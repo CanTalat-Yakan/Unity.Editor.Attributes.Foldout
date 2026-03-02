@@ -1,12 +1,13 @@
 {
   "name": "com.unityessentials.editor.attributes.foldout",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "displayName": "Editor Attributes Foldout",
   "description": "This is a part of the UnityEssentials Ecosystem",
   "unity": "6000.0",
   "unityRelease": "",
+  "resolutionStrategy": "highestPatch",
   "dependencies": {
-    "com.unityessentials.editor.hooks.inspector": "~2.0.0"
+    "com.unityessentials.editor.hooks.inspector": "2.0.0"
   },
   "keywords": [],
   "author": {
