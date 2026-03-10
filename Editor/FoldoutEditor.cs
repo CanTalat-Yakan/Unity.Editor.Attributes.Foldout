@@ -166,7 +166,7 @@ namespace UnityEssentials
         private static FoldoutGroup CreateNewGroup(FoldoutGroup parent, string segment)
         {
             var fullPath = parent?.FullPath == null ? segment : $"{parent.FullPath}/{segment}";
-            var stateKey = $"{InspectorHook.Target.GetInstanceID()}_{fullPath}";
+            var stateKey = $"{InspectorHook.Target.GetEntityId()}_{fullPath}";
 
             if (!s_foldoutStates.ContainsKey(stateKey))
                 s_foldoutStates[stateKey] = false;
